@@ -26,16 +26,11 @@ from sklearn.cross_validation import train_test_split
 from utils import threaded_batch_iter_loc
 
 # set up training params
-ITERS = 300
+ITERS = 40
 BATCHSIZE = 64
 LR_SCHEDULE = {
      0: 0.0001,
-    40: 0.00001,
-    100: 0.0001,
-    140: 0.00001,
-    200: 0.0001,
-    240: 0.00001,
-    280: 0.000001
+    25: 0.00001,
 }
 
 '''

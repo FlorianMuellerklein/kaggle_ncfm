@@ -40,23 +40,14 @@ class threaded_batch_iter_loc(object):
                 y_batch = self.y[idx[batch:batch + self.batchsize]]
 
                 # set empty copy to hold augmented images so that we don't overwrite
-                X_batch_aug = np.empty(shape = (X_batch.shape[0], 3, 448, 448), dtype = 'float32')
+                X_batch_aug = np.copy(X_batch)
+                y_batch_aug = np.copy(y_batch)
 
                 # random translations
-                trans_1 = random.randint(-12,12)
-                trans_2 = random.randint(-12,12)
-                crop_amt = ((12 - trans_1, 12 + trans_1), (12 - trans_2, 12 + trans_2), (0,0))
+                trans_1 = random.randint(-50,50)
+                trans_2 = random.randint(-50,50)
 
-                # set the transform parameters for skimage.transform.warp
-                # have to shift to center and then shift back after transformation otherwise
-                # rotations will make image go out of frame
-                center_shift   = np.array((448, 448)) / 2. - 0.5
-                tform_center   = transform.SimilarityTransform(translation=-center_shift)
-                tform_uncenter = transform.SimilarityTransform(translation=center_shift)
-
-                tform_aug = transform.AffineTransform(translation = (trans_1, trans_2))
-
-                tform = tform_center + tform_aug + tform_uncenter
+                tform_aug = transform.AffineTransform(translation=(trans_1, trans_2))
 
                 r_intensity = random.randint(0,1)
                 g_intensity = random.randint(0,1)
@@ -67,12 +58,12 @@ class threaded_batch_iter_loc(object):
                 flip_lr = random.randint(0,1)
 
                 # images in the batch do the augmentation
-                for j in range(X_batch.shape[0]):
-                    img = X_batch[j]
+                for j in range(X_batch_aug.shape[0]):
+                    img = X_batch_aug[j]
                     img = img.transpose(1, 2, 0)
                     img_aug = np.zeros((448, 448, 3))
                     for k in range(0,3):
-                        img_aug[:, :, k] = fast_warp(img[:, :, k], tform, output_shape = (448, 448))
+                        img_aug[:, :, k] = fast_warp(img[:, :, k], tform_aug, output_shape = (448, 448))
 
                     if r_intensity == 1:
                         img_aug[:, :, 0] *= intensity_scaler
@@ -81,23 +72,18 @@ class threaded_batch_iter_loc(object):
                     if b_intensity == 1:
                         img_aug[:, :, 2] *= intensity_scaler
 
+                    # do the same translations for the bounding box
+                    y_batch_aug[j][0] -= (trans_1 / 448.)
+                    y_batch_aug[j][1] -= (trans_2 / 448.)
+
                     # flip the image lr
                     if flip_lr:
                         img_aug = np.fliplr(img_aug)
+                        y_batch_aug[j][0] = 1. - y_batch_aug[j][0] - y_batch_aug[j][2]
 
                     X_batch_aug[j] = img_aug.transpose(2, 0, 1)
 
-                    # do the same translations for the bounding box
-                    y_batch[j][0] += (trans_1 / 448.)
-                    y_batch[j][1] += (trans_2 / 448.)
-                    y_batch[j][2] += (trans_1 / 448.)
-                    y_batch[j][3] += (trans_2 / 448.)
-
-                    # if we flip the images then we also need to flip the bounding box
-                    if flip_lr:
-                        y_batch[j][0] = 1. - y_batch[j][0] - y_batch[j][2]
-
-                yield [X_batch_aug, y_batch]
+                yield [X_batch_aug, y_batch_aug]
 
         def _producer(_gen_batches):
             batch_gen = _gen_batches()
