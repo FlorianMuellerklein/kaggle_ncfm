@@ -30,6 +30,8 @@ Currently a pretrained ResNet-50.
 
 **Current Performance**
 
+Red is predicted box and yellow is true box.
+
 ![fish_box](loc_test_imgs/fish_box_1.png)
 ![fish_box](loc_test_imgs/fish_box_2.png)
 ![fish_box](loc_test_imgs/fish_box_3.png)
