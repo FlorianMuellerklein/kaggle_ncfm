@@ -22,6 +22,8 @@ Currently a pretrained ResNet-50.
 **Ideas to Improve Localization**
 
 * Try different parameters for network and training. We have a small dataset, overfitting is a problem.
+* Better data augmentation for training bounding boxes. Need to be careful that the bounding boxes will still over the fish.
+* Average bounding box for a few networks.
 * We have big differences in the number of examples for each class. Might try oversampling.
 * Try dropout within the ResNet like how wide-ResNets utilize it.
 * ResNet might have too much capacity for such a small dataset. However, preliminary results look good.

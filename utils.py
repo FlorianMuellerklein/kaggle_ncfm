@@ -5,7 +5,9 @@ import pandas as pd
 
 import multiprocessing as mp
 
-from matplotlib import pyplot
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+
 from skimage.io import imshow
 from skimage.util import crop
 from skimage import transform, filters, exposure
@@ -39,20 +41,15 @@ class threaded_batch_iter_loc(object):
                 X_batch = self.X[idx[batch:batch + self.batchsize]]
                 y_batch = self.y[idx[batch:batch + self.batchsize]]
 
-                # set empty copy to hold augmented images so that we don't overwrite
+                # set copy to hold augmented images so that we don't overwrite
                 X_batch_aug = np.copy(X_batch)
                 y_batch_aug = np.copy(y_batch)
 
                 # random translations
-                trans_1 = random.randint(-50,50)
-                trans_2 = random.randint(-50,50)
+                trans_1 = random.randint(-100,100)
+                trans_2 = random.randint(-100,100)
 
                 tform_aug = transform.AffineTransform(translation=(trans_1, trans_2))
-
-                r_intensity = random.randint(0,1)
-                g_intensity = random.randint(0,1)
-                b_intensity = random.randint(0,1)
-                intensity_scaler = random.uniform(-0.15, 0.15)
 
                 # flip left-right choice
                 flip_lr = random.randint(0,1)
@@ -63,14 +60,7 @@ class threaded_batch_iter_loc(object):
                     img = img.transpose(1, 2, 0)
                     img_aug = np.zeros((448, 448, 3))
                     for k in range(0,3):
-                        img_aug[:, :, k] = fast_warp(img[:, :, k], tform_aug, output_shape = (448, 448))
-
-                    if r_intensity == 1:
-                        img_aug[:, :, 0] *= intensity_scaler
-                    if g_intensity == 1:
-                        img_aug[:, :, 1] *= intensity_scaler
-                    if b_intensity == 1:
-                        img_aug[:, :, 2] *= intensity_scaler
+                        img_aug[:,:,k] = fast_warp(img[:,:,k], tform_aug, output_shape = (448, 448))
 
                     # do the same translations for the bounding box
                     y_batch_aug[j][0] -= (trans_1 / 448.)
@@ -80,6 +70,23 @@ class threaded_batch_iter_loc(object):
                     if flip_lr:
                         img_aug = np.fliplr(img_aug)
                         y_batch_aug[j][0] = 1. - y_batch_aug[j][0] - y_batch_aug[j][2]
+
+                    '''
+                    # for debugging, display img and bounding box for each image in a batch
+                    fig, ax = plt.subplots(1)
+                    disp_img = img_aug[:,:,[2,1,0]]
+                    disp_img[:, :, 0] += 103.939
+                    disp_img[:, :, 1] += 116.779
+                    disp_img[:, :, 2] += 123.68
+                    ax.imshow(disp_img / 255.)
+                    # draw the true bounding box in yellow
+                    rect = patches.Rectangle((y_batch_aug[j][0] * 448., y_batch_aug[j][1] * 448.), y_batch_aug[j][2] * 448., y_batch_aug[j][3] * 448.,
+                                              linewidth=2, edgecolor='y',facecolor='none')
+                    # add the rectangles
+                    ax.add_patch(rect)
+                    # display
+                    plt.show()
+                    '''
 
                     X_batch_aug[j] = img_aug.transpose(2, 0, 1)
 

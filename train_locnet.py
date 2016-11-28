@@ -26,11 +26,11 @@ from sklearn.cross_validation import train_test_split
 from utils import threaded_batch_iter_loc
 
 # set up training params
-ITERS = 40
+ITERS = 100
 BATCHSIZE = 64
 LR_SCHEDULE = {
      0: 0.0001,
-    25: 0.00001,
+    60: 0.00001,
 }
 
 '''
@@ -178,8 +178,10 @@ def ResNet50():
     x = AveragePooling2D((7, 7), name='avg_pool')(x)
 
     x = Flatten()(x)
-
     x = Dropout(p=0.75)(x)
+
+    x = Dense(1024, activation='relu')(x)
+    x = Dropout(p=0.5)(x)
 
     x = Dense(4, activation='sigmoid', name='out')(x)
 
@@ -196,7 +198,7 @@ def ResNet50():
 
 resnet = ResNet50()
 
-print_summary(resnet.layers)
+#print_summary(resnet.layers)
 
 '''
 ------------------------------------------------------------------------------------------------
@@ -353,3 +355,4 @@ for i in range(10):
 
     # display
     plt.show()
+    plt.savefig('loc_test_imgs/fish_box_' + str(i) + '.png')
