@@ -180,9 +180,6 @@ def ResNet50():
     x = Flatten()(x)
     x = Dropout(p=0.75)(x)
 
-    x = Dense(1024, activation='relu')(x)
-    x = Dropout(p=0.5)(x)
-
     x = Dense(4, activation='sigmoid', name='out')(x)
 
     model = Model(img_input, x)
@@ -195,8 +192,6 @@ def ResNet50():
         convert_all_kernels_in_model(model)
 
     return model
-
-resnet = ResNet50()
 
 #print_summary(resnet.layers)
 
@@ -250,6 +245,8 @@ To try:
 4) Try a different localization architecture, ResNet might be too big for such a small dataset
 ------------------------------------------------------------------------------------------------
 '''
+resnet = ResNet50()
+
 adam = Adam(lr=0.0001)
 sgd = SGD(lr=0.0001, momentum=0.9, nesterov=True)
 resnet.compile(loss='mean_squared_error', optimizer=adam)
@@ -354,5 +351,6 @@ for i in range(10):
     ax.add_patch(rect_guess)
 
     # display
-    plt.show()
+    #plt.show()
     plt.savefig('loc_test_imgs/fish_box_' + str(i) + '.png')
+    plt.clf()

@@ -24,6 +24,7 @@ Currently a pretrained ResNet-50.
 * Try different parameters for network and training. We have a small dataset, overfitting is a problem.
 * Better data augmentation for training bounding boxes. Need to be careful that the bounding boxes will still over the fish.
 * Average bounding box for a few networks.
+* Test time augmentation for bounding box prediction
 * We have big differences in the number of examples for each class. Might try oversampling.
 * Try dropout within the ResNet like how wide-ResNets utilize it.
 * ResNet might have too much capacity for such a small dataset. However, preliminary results look good.
@@ -34,6 +35,7 @@ Currently a pretrained ResNet-50.
 
 Red is predicted box and yellow is true box.
 
+![fish_box](loc_test_imgs/fish_box_0.png)
 ![fish_box](loc_test_imgs/fish_box_1.png)
 ![fish_box](loc_test_imgs/fish_box_2.png)
 ![fish_box](loc_test_imgs/fish_box_3.png)
@@ -43,4 +45,3 @@ Red is predicted box and yellow is true box.
 ![fish_box](loc_test_imgs/fish_box_7.png)
 ![fish_box](loc_test_imgs/fish_box_8.png)
 ![fish_box](loc_test_imgs/fish_box_9.png)
-![fish_box](loc_test_imgs/fish_box_10.png)
