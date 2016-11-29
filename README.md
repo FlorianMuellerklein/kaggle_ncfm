@@ -22,7 +22,7 @@ Currently a pretrained ResNet-50.
 **Ideas to Improve Localization**
 
 * Try different parameters for network and training. We have a small dataset, overfitting is a problem.
-* Better data augmentation for training bounding boxes. Need to be careful that the bounding boxes will still over the fish.
+* Better data augmentation for training bounding boxes. Need to be careful that the bounding boxes will still over the fish. Currently doing horizontal flips and translations, maybe also try scaling.
 * Average bounding box for a few networks.
 * Test time augmentation for bounding box prediction
 * We have big differences in the number of examples for each class. Might try oversampling.
@@ -35,13 +35,8 @@ Currently a pretrained ResNet-50.
 
 Red is predicted box and yellow is true box.
 
-![fish_box](loc_test_imgs/fish_box_0.png)
-![fish_box](loc_test_imgs/fish_box_1.png)
-![fish_box](loc_test_imgs/fish_box_2.png)
-![fish_box](loc_test_imgs/fish_box_3.png)
-![fish_box](loc_test_imgs/fish_box_4.png)
-![fish_box](loc_test_imgs/fish_box_5.png)
-![fish_box](loc_test_imgs/fish_box_6.png)
-![fish_box](loc_test_imgs/fish_box_7.png)
-![fish_box](loc_test_imgs/fish_box_8.png)
-![fish_box](loc_test_imgs/fish_box_9.png)
+![fish_box](loc_test_imgs/fish_box_ensmb_0.png) ![fish_box](loc_test_imgs/fish_box_ensmb_1.png)
+![fish_box](loc_test_imgs/fish_box_ensmb_2.png) ![fish_box](loc_test_imgs/fish_box_ensmb_3.png)
+![fish_box](loc_test_imgs/fish_box_ensmb_4.png) ![fish_box](loc_test_imgs/fish_box_ensmb_5.png)
+![fish_box](loc_test_imgs/fish_box_ensmb_6.png) ![fish_box](loc_test_imgs/fish_box_ensmb_7.png)
+![fish_box](loc_test_imgs/fish_box_ensmb_8.png) ![fish_box](loc_test_imgs/fish_box_ensmb_9.png)
