@@ -205,6 +205,17 @@ X_dat = np.load('data/cache/box_imgs.npy', mmap_mode='c')
 y_dat = np.load('data/cache/box_coords.npy')
 y_dat /= 448.
 
+print 'Coords min max before'
+print np.amax(y_dat)
+print np.amin(y_dat)
+
+y_dat[y_dat < 0.] = 0.
+y_dat[y_dat > 1.] = 1.
+
+print 'Coords min max after'
+print np.amax(y_dat)
+print np.amin(y_dat)
+
 idx = np.random.permutation(len(X_dat))
 
 X_train = X_dat[idx[:3000]]
@@ -342,10 +353,10 @@ for choice in choice_imgs:
     guess = guess_coords[choice]
 
     # inflate bounding box by 10%
-    guess[0] -= 0.5 * (0.1 * (guess[0] + guess[2]))
-    guess[1] -= 0.5 * (0.1 * (guess[1] + guess[3]))
-    guess[2] += 0.5 * (0.1 * (guess[0] + guess[2]))
-    guess[3] += 0.5 * (0.1 * (guess[1] + guess[3]))
+    guess[0] -= 0.5 * (0.1 * guess[2])
+    guess[1] -= 0.5 * (0.1 * guess[3])
+    guess[2] += 0.5 * (0.1 * guess[2])
+    guess[3] += 0.5 * (0.1 * guess[3])
 
     fig, ax = plt.subplots(1)
 
