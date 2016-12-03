@@ -132,7 +132,7 @@ def bbox_tta(model, data):
     tta_preds = []
 
     # loop as many times as we designate for TTA
-    for i in range(5):
+    for i in range(10):
         print 'Running TTA ' + str(i+1) + ' ...'
         # copy the data so that we don't keep overwriting it with augs
         data_copy = np.copy(data)
@@ -166,6 +166,7 @@ def bbox_tta(model, data):
         tta_preds.append(y_pred)
 
     # take the average of each of the TTA results
-    avg_preds = (tta_preds[0] + tta_preds[1] + tta_preds[2] + tta_preds[3] + tta_preds[4]) / 5.
+    avg_preds = (tta_preds[0] + tta_preds[1] + tta_preds[2] + tta_preds[3] + tta_preds[4] +
+                 tta_preds[5] + tta_preds[6] + tta_preds[7] + tta_preds[8] + tta_preds[9]) / 10.
 
     return avg_preds
