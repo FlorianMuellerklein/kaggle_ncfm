@@ -126,3 +126,46 @@ class threaded_batch_iter_loc(object):
 
         for data in iter(q.get, None):
             yield data[0], data[1]
+
+def bbox_tta(model, data):
+    # make a list to hold each prediction
+    tta_preds = []
+
+    # loop as many times as we designate for TTA
+    for i in range(5):
+        print 'Running TTA ' + str(i+1) + ' ...'
+        # copy the data so that we don't keep overwriting it with augs
+        data_copy = np.copy(data)
+
+        # random translations
+        trans_1 = random.randint(-15,15)
+        trans_2 = random.randint(-15,15)
+
+        tform_aug = transform.AffineTransform(translation=(trans_1, trans_2))
+
+        for j in range(data_copy.shape[0]):
+            img = data_copy[j]
+            img = img.transpose(1,2,0)
+            img_aug = np.zeros((224, 224, 3))
+
+            for k in range(0,3):
+                img_aug[:,:,k] = fast_warp(img[:,:,k], tform_aug, output_shape = (224, 224))
+
+            data_copy[j] = img_aug.transpose(2, 0, 1)
+
+        # make predictions
+        y_pred = model.predict(data_copy)
+
+        print y_pred.shape
+
+        # set the predictions back to what their original position would be
+        #y_pred[:,0] += (trans_1 / 224.)
+        #y_pred[:,1] += (trans_2 / 224.)
+
+        # append prediction to list
+        tta_preds.append(y_pred)
+
+    # take the average of each of the TTA results
+    avg_preds = (tta_preds[0] + tta_preds[1] + tta_preds[2] + tta_preds[3] + tta_preds[4]) / 5.
+
+    return avg_preds

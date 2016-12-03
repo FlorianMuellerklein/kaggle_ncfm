@@ -27,7 +27,7 @@ from keras.utils.layer_utils import convert_all_kernels_in_model, print_summary
 
 from sklearn.cross_validation import train_test_split
 
-from utils import threaded_batch_iter_loc
+from utils import threaded_batch_iter_loc, bbox_tta
 
 # set up training params
 ITERS = 100
@@ -276,7 +276,7 @@ for ensmb in range(5):
 
     adam = Adam(lr=0.0001)
     sgd = SGD(lr=0.0001, momentum=0.9, nesterov=True)
-    resnet.compile(loss='mean_squared_error', optimizer=adam)
+    resnet.compile(loss='mean_absolute_error', optimizer=adam)
 
     #resnet.fit(X_train, y_train, batch_size=64, nb_epoch=100, shuffle=True,
     #           verbose=2, validation_data=(X_test, y_test), callbacks=callback_list)
@@ -333,19 +333,19 @@ Test an image and see how it did
 
 
 resnet.load_weights('weights/best_resnet_loc_0.h5')
-guess_coords_1 = resnet.predict(X_test)
+guess_coords_1 = bbox_tta(resnet, X_test)
 
 resnet.load_weights('weights/best_resnet_loc_1.h5')
-guess_coords_2 = resnet.predict(X_test)
+guess_coords_2 = bbox_tta(resnet, X_test)
 
 resnet.load_weights('weights/best_resnet_loc_2.h5')
-guess_coords_3 = resnet.predict(X_test)
+guess_coords_3 = bbox_tta(resnet, X_test)
 
 resnet.load_weights('weights/best_resnet_loc_3.h5')
-guess_coords_4 = resnet.predict(X_test)
+guess_coords_4 = bbox_tta(resnet, X_test)
 
 resnet.load_weights('weights/best_resnet_loc_4.h5')
-guess_coords_5 = resnet.predict(X_test)
+guess_coords_5 = bbox_tta(resnet, X_test)
 
 guess_coords = (guess_coords_1 + guess_coords_2 + guess_coords_3 +
                 guess_coords_4 + guess_coords_5) / 5.0
