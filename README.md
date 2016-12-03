@@ -13,15 +13,15 @@ Image -> localization network -> crop -> classification network
 
 Currently a pretrained ResNet-50.
 
-* Trained with MSE
+* Trained with MAE
 * Output x, y, height, width - normalized to (0,1)
 * Uses Adam with staring lr=0.0001 as the optimizer
-* 4 sigmoid units for output - network training is better behaved with these units vs linear units (I don't get why).
+* 4 sigmoid units for output - network training is better behaved with these units vs linear units.
 * If LocNet can't find a fish then it should just return the original image by predicting a fullsize bounding box.
 
 **Ideas to Improve Localization**
 
-* **Synthetic training images**. Manually crop two or three fish from each category from training images. Edit them in Gimp or something so that all non-fish parts of the images are transparent. Take examples from the no fish folders and randomly place one cropped fish image into image from the no-fish folder. One thing that worries me is that the boats will be different for the second stage. Currently there are only a handful of boats and the fish are likely to be in the same place in each boat. Making synthetic training images where the fish can be anywhere in the image could help with generalization. 
+* **Synthetic training images**. Manually crop two or three fish from each category from training images. Edit them in Gimp or something so that all non-fish parts of the images are transparent. Take example images from the no fish folders and randomly place one cropped fish image into image from the no-fish folder. One thing that worries me is that the boats will be different for the second stage. Currently there are only a handful of boats and the fish are likely to be in the same place in each boat. Making synthetic training images where the fish can be anywhere in the image could help with generalization.
 * Try different parameters for network and training. We have a small dataset, overfitting is a problem.
 * Better data augmentation for training bounding boxes. Need to be careful that the bounding boxes will still over the fish. Currently doing horizontal flips and translations, maybe also try scaling.
 * Average bounding box for a few networks.
