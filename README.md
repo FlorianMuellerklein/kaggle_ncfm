@@ -21,6 +21,7 @@ Currently a pretrained ResNet-50.
 
 **Ideas to Improve Localization**
 
+* **Synthetic training images**. Manually crop two or three fish from each category from training images. Edit them in Gimp or something so that all non-fish parts of the images are transparent. Take examples from the no fish folders and randomly place one cropped fish image into image from the no-fish folder. One thing that worries me is that the boats will be different for the second stage. Currently there are only a handful of boats and the fish are likely to be in the same place in each boat. Making synthetic training images where the fish can be anywhere in the image could help with generalization. 
 * Try different parameters for network and training. We have a small dataset, overfitting is a problem.
 * Better data augmentation for training bounding boxes. Need to be careful that the bounding boxes will still over the fish. Currently doing horizontal flips and translations, maybe also try scaling.
 * Average bounding box for a few networks.
