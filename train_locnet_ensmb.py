@@ -1,12 +1,16 @@
+import gzip
 import time
 import h5py
 import math
+import pickle
 import random
 import numpy as np
 
 from PIL import Image
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+
+from skimage.io import imread
 
 from keras.optimizers import SGD, Adam
 from keras.layers import merge, Input, Dropout
@@ -139,7 +143,7 @@ def ResNet50():
         A Keras model instance.
     '''
 
-    img_input = Input(shape=(3, 448, 448), name='Input', dtype='float32')
+    img_input = Input(shape=(3, 224, 224), name='Input', dtype='float32')
 
     if K.image_dim_ordering() == 'tf':
         bn_axis = 3
@@ -147,9 +151,9 @@ def ResNet50():
         bn_axis = 1
 
     # input images are 448,448 so we 2,2 maxpool stride 2 to downsample 2x
-    x = MaxPooling2D(pool_size=(2,2), strides=(2,2))(img_input)
+    #x = MaxPooling2D(pool_size=(2,2), strides=(2,2))(img_input)
 
-    x = ZeroPadding2D((3, 3))(x)
+    x = ZeroPadding2D((3, 3))(img_input)
     x = Convolution2D(64, 7, 7, subsample=(2, 2), name='conv1')(x)
     x = BatchNormalization(axis=bn_axis, name='bn_conv1')(x)
     x = Activation('relu')(x)
@@ -201,9 +205,14 @@ Load the images and split into  training and validation.
 ------------------------------------------------------------------------------------------------
 '''
 
-X_dat = np.load('data/cache/box_imgs.npy', mmap_mode='c')
-y_dat = np.load('data/cache/box_coords.npy')
-y_dat /= 448.
+X_dat = np.load('data/cache/bbox_train_imgs_fullsize.npy')
+y_dat = np.load('data/cache/bbox_train_coords_fullsize.npy')
+
+# load file names
+f = gzip.open('data/cache/file_names_train.pklz', 'rb')
+filez = pickle.load(f)
+f.close()
+
 
 print 'Coords min max before'
 print np.amax(y_dat)
@@ -220,8 +229,14 @@ idx = np.random.permutation(len(X_dat))
 
 X_train = X_dat[idx[:3000]]
 y_train = y_dat[idx[:3000]]
+f_train = []
+for i in idx[:3000]:
+    f_train.append(filez[i])
 X_test = X_dat[idx[3000:]]
 y_test = y_dat[idx[3000:]]
+f_test = []
+for i in idx[3000:]:
+    f_test.append(filez[i])
 
 print 'Training Shape:', X_train.shape, y_train.shape
 print 'Validation Shape:', X_test.shape, y_test.shape
@@ -318,19 +333,19 @@ Test an image and see how it did
 
 
 resnet.load_weights('weights/best_resnet_loc_0.h5')
-guess_coords_1 = resnet.predict(X_test) * 448.
+guess_coords_1 = resnet.predict(X_test)
 
 resnet.load_weights('weights/best_resnet_loc_1.h5')
-guess_coords_2 = resnet.predict(X_test) * 448.
+guess_coords_2 = resnet.predict(X_test)
 
 resnet.load_weights('weights/best_resnet_loc_2.h5')
-guess_coords_3 = resnet.predict(X_test) * 448.
+guess_coords_3 = resnet.predict(X_test)
 
 resnet.load_weights('weights/best_resnet_loc_3.h5')
-guess_coords_4 = resnet.predict(X_test) * 448.
+guess_coords_4 = resnet.predict(X_test)
 
 resnet.load_weights('weights/best_resnet_loc_4.h5')
-guess_coords_5 = resnet.predict(X_test) * 448.
+guess_coords_5 = resnet.predict(X_test)
 
 guess_coords = (guess_coords_1 + guess_coords_2 + guess_coords_3 +
                 guess_coords_4 + guess_coords_5) / 5.0
@@ -346,11 +361,25 @@ i = 0
 for choice in choice_imgs:
 
     # display the test image and it's bounding box
-    test_img = X_test[choice]
-    test_coords = y_test[choice] * 448.
-    test_img = test_img.transpose(1,2,0)
+    test_file = f_test[choice]
+    test_img = imread(test_file)
 
+    test_coords = y_test[choice]
+
+    # put bounding box back into original size
+    test_coords[0] *= test_img.shape[1]
+    test_coords[1] *= test_img.shape[0]
+    test_coords[2] *= test_img.shape[1]
+    test_coords[3] *= test_img.shape[0]
+
+    # get the guess coordinates
     guess = guess_coords[choice]
+
+    # put bounding box back into original size
+    guess[0] *= test_img.shape[1]
+    guess[1] *= test_img.shape[0]
+    guess[2] *= test_img.shape[1]
+    guess[3] *= test_img.shape[0]
 
     # inflate bounding box by 10%
     guess[0] -= 0.5 * (0.1 * guess[2])
@@ -362,11 +391,11 @@ for choice in choice_imgs:
 
     # display the image
     # back to RGB
-    test_img = test_img[:, :, [2,1,0]]
+    #test_img = test_img[:, :, [2,1,0]]
     # add back in the imagenet means
-    test_img[:, :, 0] += 103.939
-    test_img[:, :, 1] += 116.779
-    test_img[:, :, 2] += 123.68
+    #test_img[:, :, 0] += 103.939
+    #test_img[:, :, 1] += 116.779
+    #test_img[:, :, 2] += 123.68
 
     ax.imshow(test_img / 255.)
 

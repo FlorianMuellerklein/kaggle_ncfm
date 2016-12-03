@@ -46,30 +46,51 @@ class threaded_batch_iter_loc(object):
                 y_batch_aug = np.copy(y_batch)
 
                 # random translations
-                trans_1 = random.randint(-100,100)
-                trans_2 = random.randint(-100,100)
+                trans_1 = random.randint(-50,50)
+                trans_2 = random.randint(-50,50)
 
                 tform_aug = transform.AffineTransform(translation=(trans_1, trans_2))
 
                 # flip left-right choice
                 flip_lr = random.randint(0,1)
 
+                # flip up-down choice
+                flip_ud = random.randint(0,1)
+
+                # color intensity augmentation
+                r_intensity = random.randint(0,1)
+                g_intensity = random.randint(0,1)
+                b_intensity = random.randint(0,1)
+                intensity_scaler = random.randint(-20, 20)
+
                 # images in the batch do the augmentation
                 for j in range(X_batch_aug.shape[0]):
                     img = X_batch_aug[j]
                     img = img.transpose(1, 2, 0)
-                    img_aug = np.zeros((448, 448, 3))
+                    img_aug = np.zeros((224, 224, 3))
                     for k in range(0,3):
-                        img_aug[:,:,k] = fast_warp(img[:,:,k], tform_aug, output_shape = (448, 448))
+                        img_aug[:,:,k] = fast_warp(img[:,:,k], tform_aug, output_shape = (224, 224))
 
                     # do the same translations for the bounding box
-                    y_batch_aug[j][0] -= (trans_1 / 448.)
-                    y_batch_aug[j][1] -= (trans_2 / 448.)
+                    y_batch_aug[j][0] -= (trans_1 / 224.)
+                    y_batch_aug[j][1] -= (trans_2 / 224.)
 
                     # flip the image lr
                     if flip_lr:
                         img_aug = np.fliplr(img_aug)
                         y_batch_aug[j][0] = 1. - y_batch_aug[j][0] - y_batch_aug[j][2]
+
+                    # flip up down if that is chosen
+                    if flip_ud:
+                        img_aug = np.flipud(img_aug)
+                        y_batch_aug[j][1] = 1. - y_batch_aug[j][1] - y_batch_aug[j][3]
+
+                    if r_intensity == 1:
+                        img_aug[:,:,0] += intensity_scaler
+                    if g_intensity == 1:
+                        img_aug[:,:,1] += intensity_scaler
+                    if b_intensity == 1:
+                        img_aug[:,:,2] += intensity_scaler
 
                     '''
                     # for debugging, display img and bounding box for each image in a batch
@@ -80,7 +101,7 @@ class threaded_batch_iter_loc(object):
                     disp_img[:, :, 2] += 123.68
                     ax.imshow(disp_img / 255.)
                     # draw the true bounding box in yellow
-                    rect = patches.Rectangle((y_batch_aug[j][0] * 448., y_batch_aug[j][1] * 448.), y_batch_aug[j][2] * 448., y_batch_aug[j][3] * 448.,
+                    rect = patches.Rectangle((y_batch_aug[j][0] * 224., y_batch_aug[j][1] * 224.), y_batch_aug[j][2] * 224., y_batch_aug[j][3] * 224.,
                                               linewidth=2, edgecolor='y',facecolor='none')
                     # add the rectangles
                     ax.add_patch(rect)
