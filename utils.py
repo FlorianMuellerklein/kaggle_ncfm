@@ -159,8 +159,8 @@ def bbox_tta(model, data):
         print y_pred.shape
 
         # set the predictions back to what their original position would be
-        #y_pred[:,0] += (trans_1 / 224.)
-        #y_pred[:,1] += (trans_2 / 224.)
+        y_pred[:,0] += (trans_1 / 224.)
+        y_pred[:,1] += (trans_2 / 224.)
 
         # append prediction to list
         tta_preds.append(y_pred)
