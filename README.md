@@ -8,6 +8,17 @@ Machine learning has the ability to transform what we know about our oceans and 
 
 Image -> localization network -> crop -> classification network
 
+### Classiciation network
+
+Pretrained ResNet-50
+
+* Ensemble of 5
+* Trained with Adam lr = 0.0001
+* 15 epoch with early stopping
+* Data augmentation - lr flip, ud flip, translations by 50 px, RGB intensity scaling by ~20%
+* Local LogLoss - 0.4 with 95% acc on validation set
+* Public Kaggle LogLoss - 0.81 
+
 
 ### Localization network
 
