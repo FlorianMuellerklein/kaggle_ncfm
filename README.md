@@ -16,8 +16,9 @@ Pretrained ResNet-50
 * Trained with Adam lr = 0.0001
 * 15 epoch with early stopping
 * Data augmentation - lr flip, ud flip, translations by 50 px, RGB intensity scaling by ~20%
-* Local LogLoss - 0.4 with 95% acc on validation set
-* Public Kaggle LogLoss - 0.81 
+* Local LogLoss - ~0.3 with 95% acc on validation set
+* Public Kaggle LogLoss - 0.75
+* Test Time Augmentations - random translations of +-15 px x10 
 
 
 ### Localization network

@@ -30,14 +30,14 @@ from sklearn.cross_validation import train_test_split
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.utils import shuffle
 
-from utils import threaded_batch_iter_class, bbox_tta
+from utils import threaded_batch_iter_class, class_tta
 
 # set up training params
-ITERS = 15
+ITERS = 25
 BATCHSIZE = 64
 LR_SCHEDULE = {
      0: 0.0001,
-    60: 0.00001,
+    20: 0.00001,
 }
 
 # LabelBinarizer
@@ -339,23 +339,23 @@ test_dat[:, 2, :, :] -= 123.68
 test_dat = test_dat[:, [2,1,0], :, :]
 
 resnet.load_weights('weights/best_resnet_class_0.h5')
-preds_1 = resnet.predict(test_dat)
+preds_1 = class_tta(resnet, test_dat)
 
 resnet.load_weights('weights/best_resnet_class_1.h5')
-preds_2 = resnet.predict(test_dat)
+preds_2 = class_tta(resnet, test_dat)
 
 resnet.load_weights('weights/best_resnet_class_2.h5')
-preds_3 = resnet.predict(test_dat)
+preds_3 = class_tta(resnet, test_dat)
 
 resnet.load_weights('weights/best_resnet_class_3.h5')
-preds_4 = resnet.predict(test_dat)
+preds_4 = class_tta(resnet, test_dat)
 
 resnet.load_weights('weights/best_resnet_class_4.h5')
-preds_5 = resnet.predict(test_dat)
+preds_5 = class_tta(resnet, test_dat)
 
 preds = (preds_1 + preds_2 + preds_3 +
          preds_4 + preds_5) / 5.0
 
 out = pd.DataFrame(preds, columns=['ALB', 'BET', 'DOL', 'LAG', 'NoF', 'OTHER', 'SHARK', 'YFT'])
 out.loc[:, 'image'] = pd.Series(labels, index=out.index)
-out.to_csv('data/subm/first_try.csv', index=False)
+out.to_csv('data/subm/more_aug_tta.csv', index=False)
