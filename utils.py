@@ -67,18 +67,31 @@ class threaded_batch_iter_class(object):
                 y_batch_aug = np.copy(y_batch)
 
                 # random translations
-                trans_1 = random.randint(-50,50)
-                trans_2 = random.randint(-50,50)
+                trans_1 = random.randint(-20,20)
+                trans_2 = random.randint(-20,20)
 
                 # random zooms
                 zoom = random.uniform(0.8, 1.2)
 
                 # shearing
-                shear_deg = random.uniform(-5,5)
+                shear_deg = random.uniform(-10,10)
+
+                # rotate
+                dorotate = random.randint(-45, 45)
+
+                # set the transform parameters for skimage.transform.warp
+                # have to shift to center and then shift back after transformation otherwise
+                # rotations will make image go out of frame
+                center_shift   = np.array((224, 224)) / 2. - 0.5
+                tform_center   = transform.SimilarityTransform(translation=-center_shift)
+                tform_uncenter = transform.SimilarityTransform(translation=center_shift)
 
                 tform_aug = transform.AffineTransform(shear = np.deg2rad(shear_deg),
+                                                      rotation = np.deg2rad(dorotate),
                                                       scale=(1/zoom, 1/zoom),
                                                       translation=(trans_1, trans_2))
+
+                tform = tform_center + tform_aug + tform_uncenter
 
                 # flip left-right choice
                 flip_lr = random.randint(0,1)
@@ -95,10 +108,10 @@ class threaded_batch_iter_class(object):
                 # images in the batch do the augmentation
                 for j in range(X_batch_aug.shape[0]):
                     img = X_batch_aug[j]
-                    img = img.transpose(1, 2, 0)
+                    #img = img.transpose(1, 2, 0)
                     img_aug = np.zeros((224, 224, 3))
                     for k in range(0,3):
-                        img_aug[:,:,k] = fast_warp(img[:,:,k], tform_aug, output_shape = (224, 224))
+                        img_aug[:,:,k] = fast_warp(img[:,:,k], tform, output_shape = (224, 224))
 
                     # flip the image lr
                     if flip_lr:
@@ -115,7 +128,7 @@ class threaded_batch_iter_class(object):
                     if b_intensity == 1:
                         img_aug[:,:,2] += intensity_scaler
 
-                    X_batch_aug[j] = img_aug.transpose(2, 0, 1)
+                    X_batch_aug[j] = img_aug
 
                 yield [X_batch_aug, y_batch_aug]
 
@@ -283,15 +296,15 @@ class threaded_batch_iter_pseudo(object):
             num_samples = len(self.X)
             # do random permutation
             idx = np.random.permutation(num_samples)
-            pidx = np.random.permutation(xrange(len(self.Xp)))
+            pidx = np.random.permutation(len(self.Xp))
             # loop over batches
             for i in range((num_samples + BATCHSIZE - 1) // BATCHSIZE):
                 sl = slice(i*BATCHSIZE, (i+1) * BATCHSIZE)
                 psl = slice(i*pBATCHSIZE, (i+1) * pBATCHSIZE)
 
                 # set copy to hold augmented images so that we don't overwrite
-                X_batch_aug = np.copy(np.vstack((self.X[idx[sl]], self.Xp[pidx[psl]])))
-                y_batch_aug = np.copy(np.vstack((self.y[idx[sl]], self.yp[pidx[psl]])))
+                X_batch_aug = np.vstack((self.X[idx[sl]], self.Xp[pidx[psl]]))
+                y_batch_aug = np.vstack((self.y[idx[sl]], self.yp[pidx[psl]]))
 
                 X_batch_aug, y_batch_aug = shuffle(X_batch_aug, y_batch_aug)
 
@@ -324,7 +337,6 @@ class threaded_batch_iter_pseudo(object):
                 # images in the batch do the augmentation
                 for j in range(X_batch_aug.shape[0]):
                     img = X_batch_aug[j]
-                    img = img.transpose(1, 2, 0)
                     img_aug = np.zeros((224, 224, 3))
                     for k in range(0,3):
                         img_aug[:,:,k] = fast_warp(img[:,:,k], tform_aug, output_shape = (224, 224))
@@ -344,7 +356,7 @@ class threaded_batch_iter_pseudo(object):
                     if b_intensity == 1:
                         img_aug[:,:,2] += intensity_scaler
 
-                    X_batch_aug[j] = img_aug.transpose(2, 0, 1)
+                    X_batch_aug[j] = img_aug
 
                 yield [X_batch_aug, y_batch_aug]
 
@@ -411,14 +423,14 @@ def bbox_tta(model, data):
 
     return avg_preds
 
-def class_tta(model, data):
+def class_tta(model, data, num_tta=10, model_num=0):
     '''TTA for classification'''
     # make a list to hold each prediction
     tta_preds = []
 
     # loop as many times as we designate for TTA
-    for i in range(10):
-        print 'Running TTA ' + str(i+1) + ' ...'
+    for i in range(num_tta):
+        print 'Running model' + str(model_num) + ' TTA ' + str(i+1) + ' ...'
         # copy the data so that we don't keep overwriting it with augs
         data_copy = np.copy(data)
 
@@ -430,13 +442,13 @@ def class_tta(model, data):
 
         for j in range(data_copy.shape[0]):
             img = data_copy[j]
-            img = img.transpose(1,2,0)
+            #img = img.transpose(1,2,0)
             img_aug = np.zeros((224, 224, 3))
 
             for k in range(0,3):
                 img_aug[:,:,k] = fast_warp(img[:,:,k], tform_aug, output_shape = (224, 224))
 
-            data_copy[j] = img_aug.transpose(2, 0, 1)
+            data_copy[j] = img_aug #.transpose(2, 0, 1)
 
         # make predictions
         y_pred = model.predict(data_copy)
@@ -444,8 +456,18 @@ def class_tta(model, data):
         # append prediction to list
         tta_preds.append(y_pred)
 
+
     # take the average of each of the TTA results
-    avg_preds = (tta_preds[0] + tta_preds[1] + tta_preds[2] + tta_preds[3] + tta_preds[4] +
-                 tta_preds[5] + tta_preds[6] + tta_preds[7] + tta_preds[8] + tta_preds[9]) / 10.
+    for j in range(len(tta_preds)):
+        if j == 0:
+            avg_preds = tta_preds[j]
+        else:
+            avg_preds += tta_preds[j]
+
+    avg_preds /= float(len(tta_preds))
+
+    # take the average of each of the TTA results
+    #avg_preds = (tta_preds[0] + tta_preds[1] + tta_preds[2] + tta_preds[3] + tta_preds[4] +
+    #             tta_preds[5] + tta_preds[6] + tta_preds[7] + tta_preds[8] + tta_preds[9]) / 10.
 
     return avg_preds

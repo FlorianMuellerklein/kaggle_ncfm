@@ -33,16 +33,11 @@ from sklearn.utils import shuffle
 
 from utils import threaded_batch_iter_class, class_tta
 
-# set up training params
-ITERS = 120
-BATCHSIZE = 64
-LR_SCHEDULE = {
-     0: 0.0001,
-   100: 0.00001
-}
+# how many NN did we ensemble
+ensmb_size = int(sys.argv[1])
 
-# get number for ensemble
-ensmb = int(sys.argv[1])
+# number of crops to evalute each network on
+num_crops = int(sys.argv[2])
 
 # LabelBinarizer
 lblr = LabelBinarizer()
@@ -208,114 +203,14 @@ def ResNet50():
 
     return model
 
-#print_summary(resnet.layers)
-
-
-'''
-------------------------------------------------------------------------------------------------
-Compile and Train the Model
-
-and
-
-Load the images and split into  training and validation.
-------------------------------------------------------------------------------------------------
-'''
-
-X_dat = np.load('data/cache/X_train_classification.npy')
-
-# load file names
-f = gzip.open('data/cache/y_train_classification_labels.pklz', 'rb')
-y_dat = pickle.load(f)
-f.close()
-
-y_dat = lblr.fit_transform(y_dat)
-
-X_dat, y_dat = shuffle(X_dat, y_dat)
-
-X_train, X_test, y_train, y_test = train_test_split(X_dat, y_dat, test_size=0.15)
-
-
-print 'Training Shape:', X_train.shape, y_train.shape
-print 'Validation Shape:', X_test.shape, y_test.shape
-
-# Do preprocessing consistent with how it was done when the ImageNet images were
-# used to originally train the model
-# subtract channels means from ImageNet
-X_train[:, :, :, 0] -= 103.939
-X_train[:, :, :, 1] -= 116.779
-X_train[:, :, :, 2] -= 123.68
-# 'RGB'->'BGR'
-X_train = X_train[:, :, :, [2,1,0]]
-
-X_test[:, :, :, 0] -= 103.939
-X_test[:, :, :, 1] -= 116.779
-X_test[:, :, :, 2] -= 123.68
-# 'RGB'->'BGR'
-X_test = X_test[:, :, :, [2,1,0]]
-
-#X_train, X_test, y_train, y_test = train_test_split(X_dat, y_dat, test_size = 0.05)
 
 resnet = ResNet50()
-
-adam = Adam(lr=0.0001)
-sgd = SGD(lr=0.0001, momentum=0.9, decay=0.0, nesterov=True)
-resnet.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=['accuracy'])
-
-#resnet.fit(X_train, y_train, batch_size=64, nb_epoch=100, shuffle=True,
-#           verbose=2, validation_data=(X_test, y_test), callbacks=callback_list)
-
-# load batch_iter
-batch_iter = threaded_batch_iter_class(batchsize=BATCHSIZE)
-
-print "Starting training ..."
-# batch iterator with 300 epochs
-train_loss = []
-valid_loss = []
-train_acc = []
-best_vl = 20.0
-patience = 0
-try:
-    for epoch in range(ITERS):
-        # change learning rate according to schedule
-        if epoch in LR_SCHEDULE:
-            K.set_value(sgd.lr, LR_SCHEDULE[epoch])
-        start = time.time()
-        #loss = batch_iterator(x_train, y_train, 64, model)
-        batch_loss = []
-        batch_acc = []
-        for X_batch, y_batch in batch_iter(X_train, y_train):
-            loss, acc_t = resnet.train_on_batch(X_batch, y_batch)
-            batch_loss.append(loss)
-            batch_acc.append(acc_t)
-
-        train_loss.append(np.mean(batch_loss))
-        train_acc.append(np.mean(batch_acc))
-        v_loss, v_acc = resnet.evaluate(X_test, y_test, batch_size=BATCHSIZE, verbose = 0)
-        valid_loss.append(v_loss)
-        end = time.time() - start
-        print epoch, '| Tloss:', np.round(np.mean(batch_loss), decimals = 3), '| Tacc:', np.round(np.mean(train_acc), decimals = 3), '| Vloss:', np.round(v_loss, decimals = 3),  '| Vacc:', np.round(v_acc, decimals = 3),'| time:', np.round(end, decimals = 1)
-
-        if v_loss < best_vl:
-            best_vl = v_loss
-            resnet.save_weights('weights/best_resnet_class_' + str(ensmb) + '.h5')
-            best_epoch = epoch
-
-        if v_loss > best_vl:
-            patience += 1
-
-        #if patience >= 150:
-        #    break
-
-except KeyboardInterrupt:
-    pass
-
-print 'best epoch:', best_epoch
 
 '''
 ------------------------------------------------------------------------------------------------
 Make predictions on the cropped test set
 ------------------------------------------------------------------------------------------------
-
+'''
 
 test_dat = np.load('data/cache/X_test_classification.npy')
 # load file names
@@ -333,11 +228,11 @@ test_dat[:, :, :, 2] -= 123.68
 test_dat = test_dat[:, :, :, [2,1,0]]
 
 ensmb_preds = []
-for i in range(ensmb):
+for i in range(ensmb_size):
     resnet.load_weights('weights/best_resnet_class_' + str(i) + '.h5')
     ensmb_preds.append(class_tta(resnet, test_dat, num_tta=num_crops, model_num=i))
 
-# take the average of each of the ensemble results
+    # take the average of each of the ensemble results
 for j in range(len(ensmb_preds)):
     if j == 0:
         preds = ensmb_preds[j]
@@ -347,9 +242,8 @@ for j in range(len(ensmb_preds)):
 preds /= float(len(ensmb_preds))
 
 #preds = (ensmb_preds[0] + ensmb_preds[1] + ensmb_preds[2] + ensmb_preds[3] + ensmb_preds[4] +
-#         ensmb_preds[5] + ensmb_preds[6] + ensmb_preds[7] + ensmb_preds[8] + ensmb_preds[9]) / float(ensmb)
+#         ensmb_preds[5] + ensmb_preds[6] + ensmb_preds[7] + ensmb_preds[8] + ensmb_preds[9]) / float(ensmb_size)
 
 out = pd.DataFrame(preds, columns=['ALB', 'BET', 'DOL', 'LAG', 'NoF', 'OTHER', 'SHARK', 'YFT'])
 out.loc[:, 'image'] = pd.Series(labels, index=out.index)
 out.to_csv('data/subm/ensmb_' + str(ensmb_size) + '_resnet_' + str(num_crops) + '_tta.csv', index=False)
-'''

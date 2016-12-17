@@ -10,21 +10,22 @@ from skimage import transform
 
 folders = ['ALB', 'BET', 'DOL', 'LAG', 'NoF', 'OTHER', 'SHARK', 'YFT']
 
-X_train = np.empty(shape=(3777,3,224,224), dtype='float32')
+X_train = []
 y_train = []
 img_count = 0
 for fish_type in folders:
-    path = os.path.join('data', 'train', 'train', fish_type, '*_cropped.jpg')
+    path = os.path.join('data', 'train_clean', fish_type, '*_cropped.jpg')
     files = glob.glob(path)
     for fl in files:
         print fl, img_count
         img = imread(fl)
         img = transform.resize(img, output_shape=(224,224,3), preserve_range=True)
-        img = img.transpose(2,0,1).astype('float32')
-        X_train[img_count] = img
+        #img = img.transpose(2,0,1).astype('float32')
+        X_train.append(img.astype('float32'))
         y_train.append(fish_type)
         img_count += 1
 
+X_train = np.asarray(X_train, dtype='float32')
 print 'X_train shape:', X_train.shape
 np.save('data/cache/X_train_classification.npy', X_train)
 # save labels
