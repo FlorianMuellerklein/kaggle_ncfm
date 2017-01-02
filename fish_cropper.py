@@ -249,16 +249,16 @@ Test an image and see how it did
 #resnet.load_weights('weights/best_resnet_loc_0.h5')
 #guess_coords_1 = bbox_tta(resnet, X_dat)
 
-resnet.load_weights('weights/best_resnet_synth_loc_1.h5')
+resnet.load_weights('weights/best_resnet_loc_1.h5')
 guess_coords_2 = bbox_tta(resnet, X_dat)
 
-resnet.load_weights('weights/best_resnet_synth_loc_2.h5')
+resnet.load_weights('weights/best_resnet_loc_2.h5')
 guess_coords_3 = bbox_tta(resnet, X_dat)
 
-resnet.load_weights('weights/best_resnet_synth_loc_3.h5')
+resnet.load_weights('weights/best_resnet_loc_3.h5')
 guess_coords_4 = bbox_tta(resnet, X_dat)
 
-resnet.load_weights('weights/best_resnet_synth_loc_4.h5')
+resnet.load_weights('weights/best_resnet_loc_4.h5')
 guess_coords_5 = bbox_tta(resnet, X_dat)
 
 guess_coords = (guess_coords_2 + guess_coords_3 +

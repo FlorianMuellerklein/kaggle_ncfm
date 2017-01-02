@@ -6,7 +6,6 @@ import math
 import pickle
 import random
 import numpy as np
-import pandas as pd
 
 from PIL import Image
 import matplotlib.pyplot as plt
@@ -18,31 +17,33 @@ from keras.optimizers import SGD, Adam
 from keras.layers import merge, Input, Dropout
 from keras.layers import Dense, Activation, Flatten
 from keras.layers import Convolution2D, MaxPooling2D, ZeroPadding2D, AveragePooling2D
-from keras.layers.advanced_activations import LeakyReLU
 from keras.layers import BatchNormalization
 from keras.regularizers import l2
 from keras.models import Model
 from keras.preprocessing import image
 import keras.backend as K
 from keras.callbacks import LearningRateScheduler
-from keras.utils.layer_utils import convert_all_kernels_in_model, print_summary
+from keras.utils.layer_utils import print_summary
 
-from sklearn.cross_validation import train_test_split
-from sklearn.preprocessing import LabelBinarizer
 from sklearn.utils import shuffle
+from sklearn.preprocessing import LabelBinarizer
+from sklearn.cross_validation import train_test_split
 
-from utils import threaded_batch_iter_class, class_tta
+from utils import threaded_batch_iter_loc_class, bbox_tta
 
 # set up training params
-ITERS = 120
+ITERS = 250
 BATCHSIZE = 64
 LR_SCHEDULE = {
      0: 0.0001,
-   100: 0.00001
+    200: 0.00001,
 }
 
 # get number for ensemble
 ensmb = int(sys.argv[1])
+
+# number of TTA
+num_crops = int(sys.argv[2])
 
 # LabelBinarizer
 lblr = LabelBinarizer()
@@ -153,7 +154,7 @@ def ResNet50():
         A Keras model instance.
     '''
 
-    img_input = Input(shape=(224, 224, 3), name='Input', dtype='float32')
+    img_input = Input(shape=(224,224,3), name='Input', dtype='float32')
 
     if K.image_dim_ordering() == 'tf':
         bn_axis = 3
@@ -192,15 +193,20 @@ def ResNet50():
     x = AveragePooling2D((7, 7), name='avg_pool')(x)
 
     x = Flatten()(x)
-    x = Dropout(p=0.75)(x)
+    x = Dropout(p=0.5)(x)
 
-    x = Dense(8, activation='softmax', name='out')(x)
+    #x = Dense(1024, activation='relu', name='fc7')(x)
+    #x = Dropout(p=0.5)(x)
+    #x = Dense(1024, activation='relu', name='fc8')(x)
+    #x = Dropout(p=0.5)(x)
 
-    model = Model(img_input, x)
+    bbox_out = Dense(4, activation='sigmoid', name='coords')(x)
+    class_out = Dense(8, activation='softmax', name='class')(x)
+
+    model = Model([img_input], [bbox_out, class_out])
 
     # load weights
     #f = h5py.File('data/resnet50_weights_th_dim_ordering_th_kernels_notop.h5')
-    #model.load_weights('data/resnet50_weights_th_dim_ordering_th_kernels_notop.h5', by_name=True)
     model.load_weights('data/resnet50_weights_tf_dim_ordering_tf_kernels_notop.h5', by_name=True)
 
     if K.backend() == 'theano':
@@ -208,140 +214,230 @@ def ResNet50():
 
     return model
 
-#print_summary(resnet.layers)
+'''
+------------------------------------------------------------------------------------------------
+Load the images and split into  training and validation.
+------------------------------------------------------------------------------------------------
+'''
 
+X_dat = np.load('data/cache/bbox_train_clean_imgs_fullsize.npy')
+y_dat = np.load('data/cache/bbox_train_clean_coords_fullsize.npy')
+y_labels = np.load('data/cache/bbox_train_clean_labels.npy')
+
+# load file names
+f = gzip.open('data/cache/file_names_train_clean.pklz', 'rb')
+filez = pickle.load(f)
+f.close()
+
+print 'X shape:', X_dat.shape
+print 'y shape:', y_dat.shape
+print 'File length:', len(filez)
+
+
+print 'Coords min max before'
+print np.amax(y_dat)
+print np.amin(y_dat)
+
+y_dat[y_dat < 0.] = 0.
+y_dat[y_dat > 1.] = 1.
+
+print 'Coords min max after'
+print np.amax(y_dat)
+print np.amin(y_dat)
+
+# Do preprocessing consistent with how it was done when the ImageNet images were
+# used to originally train the model
+# 'RGB'->'BGR'
+X_dat = X_dat[:, :, :, [2,1,0]]
+# subtract channels means from ImageNet
+X_dat[:, :, :, 0] -= 103.939
+X_dat[:, :, :, 1] -= 116.779
+X_dat[:, :, :, 2] -= 123.68
+
+y_labels = lblr.fit_transform(y_labels)
+
+idx = np.random.permutation(len(X_dat))
+X_dat = X_dat[idx]
+y_dat = y_dat[idx]
+y_labels = y_labels[idx]
+
+#X_train, X_test, y_bb_train, y_bb_test, y_lbl_train, y_lbl_test = train_test_split(X_dat, y_dat, y_labels, test_size=0.2)
+
+split = int(X_dat.shape[0] * 0.15)
+X_train = X_dat[split:]
+X_test = X_dat[:split]
+y_bb_train = y_dat[split:]
+y_bb_test = y_dat[:split]
+y_lbl_train = y_labels[split:]
+y_lbl_test = y_labels[:split]
+
+print 'Train/val data shapes:', X_train.shape, X_test.shape
+print 'Train/val bb shapes:', y_bb_train.shape, y_bb_test.shape
+print 'Train/val label shapes:', y_lbl_train.shape, y_lbl_test.shape
 
 '''
 ------------------------------------------------------------------------------------------------
 Compile and Train the Model
 
-and
-
-Load the images and split into  training and validation.
+To try:
+1) Felix Lau did 1000 iterations with early stopping and patience of 150 for the whale competition.
+   He wasn't able to use pretrained models in that competition though.
+   This one is initialized with ImageNet weights.
+2) Mess with dropout rate at the end of the ResNet
+3) Try dropout within the ResNet like how wide-resnets do it
+4) Try a different localization architecture, ResNet might be too big for such a small dataset
 ------------------------------------------------------------------------------------------------
 '''
 
-X_dat = np.load('data/cache/X_train_classification_clean.npy')
-
-# load file names
-f = gzip.open('data/cache/y_train_classification_labels_clean.pklz', 'rb')
-y_dat = pickle.load(f)
-f.close()
-
-y_dat = lblr.fit_transform(y_dat)
-
-X_dat, y_dat = shuffle(X_dat, y_dat)
-
-X_train, X_test, y_train, y_test = train_test_split(X_dat, y_dat, test_size=0.2)
-
-
-print 'Training Shape:', X_train.shape, y_train.shape
-print 'Validation Shape:', X_test.shape, y_test.shape
-
-# Do preprocessing consistent with how it was done when the ImageNet images were
-# used to originally train the model
-# subtract channels means from ImageNet
-# 'RGB'->'BGR'
-X_train = X_train[:, :, :, [2,1,0]]
-X_train[:, :, :, 0] -= 103.939
-X_train[:, :, :, 1] -= 116.779
-X_train[:, :, :, 2] -= 123.68
-
-
-# 'RGB'->'BGR'
-X_test = X_test[:, :, :, [2,1,0]]
-X_test[:, :, :, 0] -= 103.939
-X_test[:, :, :, 1] -= 116.779
-X_test[:, :, :, 2] -= 123.68
-
-
-#X_train, X_test, y_train, y_test = train_test_split(X_dat, y_dat, test_size = 0.05)
-
 resnet = ResNet50()
 
+print_summary(resnet.layers)
+
 adam = Adam(lr=0.0001)
-sgd = SGD(lr=0.0001, momentum=0.9, decay=0.0, nesterov=True)
-resnet.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=['accuracy'])
+sgd = SGD(lr=0.001, momentum=0.9, nesterov=True)
+resnet.compile(loss=['mse', 'categorical_crossentropy'], optimizer=adam, loss_weights=[1.,0.25])
 
 #resnet.fit(X_train, y_train, batch_size=64, nb_epoch=100, shuffle=True,
 #           verbose=2, validation_data=(X_test, y_test), callbacks=callback_list)
-'''
+
 # load batch_iter
-batch_iter = threaded_batch_iter_class(batchsize=BATCHSIZE)
+batch_iter = threaded_batch_iter_loc_class(batchsize=BATCHSIZE)
 
 print "Starting training ..."
-# batch iterator with 300 epochs
+
 train_loss = []
+train_bb_loss = []
+train_class_loss = []
 valid_loss = []
-train_acc = []
+valid_bb_loss = []
+valid_class_loss = []
 best_vl = 20.0
 patience = 0
 try:
     for epoch in range(ITERS):
         # change learning rate according to schedule
         if epoch in LR_SCHEDULE:
-            K.set_value(sgd.lr, LR_SCHEDULE[epoch])
+            K.set_value(adam.lr, LR_SCHEDULE[epoch])
         start = time.time()
         #loss = batch_iterator(x_train, y_train, 64, model)
         batch_loss = []
-        batch_acc = []
-        for X_batch, y_batch in batch_iter(X_train, y_train):
-            loss, acc_t = resnet.train_on_batch(X_batch, y_batch)
-            batch_loss.append(loss)
-            batch_acc.append(acc_t)
+        batch_bb_loss = []
+        batch_class_loss = []
+        for X_batch, y_bb_batch, y_lbl_batch in batch_iter(X_train, y_bb_train, y_lbl_train):
+            overall_loss, bbox_loss, class_loss = resnet.train_on_batch(X_batch, [y_bb_batch, y_lbl_batch])
+            batch_loss.append(overall_loss)
+            batch_bb_loss.append(bbox_loss)
+            batch_class_loss.append(class_loss)
 
         train_loss.append(np.mean(batch_loss))
-        train_acc.append(np.mean(batch_acc))
-        v_loss, v_acc = resnet.evaluate(X_test, y_test, batch_size=BATCHSIZE, verbose = 0)
-        valid_loss.append(v_loss)
+        train_bb_loss.append(np.mean(batch_bb_loss))
+        train_class_loss.append(np.mean(batch_class_loss))
+        v_o_loss, v_bb_loss, v_class_loss = resnet.evaluate(X_test, [y_bb_test, y_lbl_test], batch_size=BATCHSIZE, verbose = 0)
+        valid_loss.append(v_o_loss)
+        valid_bb_loss.append(v_bb_loss)
+        valid_class_loss.append(v_class_loss)
         end = time.time() - start
-        print epoch, '| Tloss:', np.round(np.mean(batch_loss), decimals = 3), '| Tacc:', np.round(np.mean(train_acc), decimals = 3), '| Vloss:', np.round(v_loss, decimals = 3),  '| Vacc:', np.round(v_acc, decimals = 3),'| time:', np.round(end, decimals = 1)
+        print epoch, '| tO:{:.3} | tBB:{:.3} | tC:{:.3} | vO:{:.3} | vBB:{:.3} | vC:{:.3} | T:{}'.format(train_loss[epoch],
+                                                                                                         train_bb_loss[epoch],
+                                                                                                         train_class_loss[epoch],
+                                                                                                         v_o_loss,
+                                                                                                         v_bb_loss,
+                                                                                                         v_class_loss,
+                                                                                                         int(end))
 
-        if v_loss < best_vl:
-            best_vl = v_loss
-            resnet.save_weights('weights/best_resnet_class_' + str(ensmb) + '_clean.h5')
+        if v_bb_loss < best_vl:
+            best_vl = v_bb_loss
+            resnet.save_weights('weights/best_resnet_loc_split_' + str(ensmb) + '.h5')
             best_epoch = epoch
 
-        if v_loss > best_vl:
+        if v_bb_loss > best_vl:
             patience += 1
+        else:
+            patience = 0
 
-        #if patience >= 150:
-        #    break
+        if patience >= 50:
+            break
 
 except KeyboardInterrupt:
     pass
 
 print 'best epoch:', best_epoch
-'''
 
 '''
 ------------------------------------------------------------------------------------------------
-Make predictions on the cropped test set
+Test an image and see how it did
 ------------------------------------------------------------------------------------------------
 '''
+resnet.load_weights('weights/best_resnet_loc_split_' + str(ensmb) + '.h5')
 
-test_dat = np.load('data/cache/X_test_classification.npy')
-# load file names
-f = gzip.open('data/cache/y_test_classification_labels.pklz', 'rb')
-labels = pickle.load(f)
-f.close()
-
-# Do preprocessing consistent with how it was done when the ImageNet images were
-# used to originally train the model
-# subtract channels means from ImageNet
-test_dat[:, :, :, 0] -= 103.939
-test_dat[:, :, :, 1] -= 116.779
-test_dat[:, :, :, 2] -= 123.68
-# 'RGB'->'BGR'
-test_dat = test_dat[:, :, :, [2,1,0]]
-
-resnet.load_weights('weights/best_resnet_class_' + str(ensmb) + '_clean.h5')
-preds = class_tta(resnet, test_dat, num_tta=40, model_num=ensmb)
+#vgg_model.load_weights('weights/best_vgg_bb_model_loc_' + str(ensmb) + '.h5')
+guess_coords = bbox_tta(resnet, X_test, num_tta=num_crops)
 
 
-#preds = (ensmb_preds[0] + ensmb_preds[1] + ensmb_preds[2] + ensmb_preds[3] + ensmb_preds[4] +
-#         ensmb_preds[5] + ensmb_preds[6] + ensmb_preds[7] + ensmb_preds[8] + ensmb_preds[9]) / float(ensmb)
+# some things to try
+# 1) inflate the bounding box by some amount, say 10%, to allow for some error
+# 2) force bounding box to be square, by taking the max of width and height and setting both to that
+# 3)
 
-out = pd.DataFrame(preds, columns=['ALB', 'BET', 'DOL', 'LAG', 'NoF', 'OTHER', 'SHARK', 'YFT'])
-out.loc[:, 'image'] = pd.Series(labels, index=out.index)
-out.to_csv('data/subm/resnet_' + str(40) + '_tta.csv', index=False)
+choice_imgs = random.sample(xrange(len(X_test)), 10)
+
+i = 0
+for choice in choice_imgs:
+
+    # display the test image and it's bounding box
+    test_img = X_test[choice]
+    #test_img = imread(test_file)
+
+    test_coords = y_bb_test[choice]
+
+    # put bounding box back into original size
+    test_coords[0] *= test_img.shape[1]
+    test_coords[1] *= test_img.shape[0]
+    test_coords[2] *= test_img.shape[1]
+    test_coords[3] *= test_img.shape[0]
+
+    # get the guess coordinates
+    guess = guess_coords[choice]
+
+    # put bounding box back into original size
+    guess[0] *= test_img.shape[1]
+    guess[1] *= test_img.shape[0]
+    guess[2] *= test_img.shape[1]
+    guess[3] *= test_img.shape[0]
+
+    # inflate bounding box by 10%
+    guess[0] -= 0.5 * (0.1 * guess[2])
+    guess[1] -= 0.5 * (0.1 * guess[3])
+    guess[2] += 0.5 * (0.1 * guess[2])
+    guess[3] += 0.5 * (0.1 * guess[3])
+
+    fig, ax = plt.subplots(1)
+
+    # display the image
+    # add back in the imagenet means
+    test_img[:, :, 0] += 103.939
+    test_img[:, :, 1] += 116.779
+    test_img[:, :, 2] += 123.68
+    # back to RGB
+    test_img = test_img[:, :, [2,1,0]]
+
+    ax.imshow(test_img / 255.)
+
+    # draw the true bounding box in yellow
+    rect_tru = patches.Rectangle((test_coords[0], test_coords[1]), test_coords[2], test_coords[3],
+                                  linewidth=2, edgecolor='y',facecolor='none')
+
+    # draw the guess bounding box in red
+    rect_guess = patches.Rectangle((guess[0], guess[1]), guess[2], guess[3],
+                                    linewidth=2, edgecolor='r',facecolor='none')
+
+    # add the rectangles
+    ax.add_patch(rect_tru)
+    ax.add_patch(rect_guess)
+
+    # display
+    #plt.show()
+    plt.savefig('loc_test_imgs/fish_box_resnet_split_' + str(i) + '.png')
+    plt.clf()
+
+    i += 1

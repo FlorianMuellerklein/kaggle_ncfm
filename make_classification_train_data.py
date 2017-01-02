@@ -27,8 +27,8 @@ for fish_type in folders:
 
 X_train = np.asarray(X_train, dtype='float32')
 print 'X_train shape:', X_train.shape
-np.save('data/cache/X_train_classification.npy', X_train)
+np.save('data/cache/X_train_classification_clean.npy', X_train)
 # save labels
-f = gzip.open('data/cache/y_train_classification_labels.pklz', 'wb')
+f = gzip.open('data/cache/y_train_classification_labels_clean.pklz', 'wb')
 pickle.dump(y_train, f)
 f.close()

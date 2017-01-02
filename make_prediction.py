@@ -229,7 +229,7 @@ test_dat = test_dat[:, :, :, [2,1,0]]
 
 ensmb_preds = []
 for i in range(ensmb_size):
-    resnet.load_weights('weights/best_resnet_class_' + str(i) + '.h5')
+    resnet.load_weights('weights/best_resnet_class_' + str(i+1) + '_clean.h5')
     ensmb_preds.append(class_tta(resnet, test_dat, num_tta=num_crops, model_num=i))
 
     # take the average of each of the ensemble results
@@ -246,4 +246,4 @@ preds /= float(len(ensmb_preds))
 
 out = pd.DataFrame(preds, columns=['ALB', 'BET', 'DOL', 'LAG', 'NoF', 'OTHER', 'SHARK', 'YFT'])
 out.loc[:, 'image'] = pd.Series(labels, index=out.index)
-out.to_csv('data/subm/ensmb_' + str(ensmb_size) + '_resnet_' + str(num_crops) + '_tta.csv', index=False)
+out.to_csv('data/subm/ensmb_' + str(ensmb_size) + '_resnet_' + str(num_crops) + '_clean_tta.csv', index=False)
