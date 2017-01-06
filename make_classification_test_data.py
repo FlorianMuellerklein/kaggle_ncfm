@@ -11,7 +11,7 @@ from skimage import transform
 y_test = []
 X_test = np.empty(shape=(1000,224,224,3), dtype='float32')
 img_count = 0
-path = os.path.join('data', 'test_stg1', '*_cropped.jpg')
+path = os.path.join('data', 'test_stg1_new', '*_cropped.jpg')
 files = glob.glob(path)
 for fl in files:
     print fl, img_count
@@ -19,7 +19,7 @@ for fl in files:
     img = transform.resize(img, output_shape=(224,224,3), preserve_range=True)
     #img = img.transpose(2,0,1).astype('float32')
     X_test[img_count] = img.astype('float32')
-    y_test.append(fl.split('/test_stg1/')[1])
+    y_test.append(fl.split('/test_stg1_new/')[1])
     img_count += 1
 
 for i in range(len(y_test)):

@@ -13,36 +13,41 @@ import matplotlib.patches as patches
 
 from skimage.io import imread
 
+import keras.backend as K
+from keras.models import Sequential
 from keras.optimizers import SGD, Adam
 from keras.layers import merge, Input, Dropout
-from keras.layers import Dense, Activation, Flatten
+from keras.layers import Dropout, ZeroPadding2D
+from keras.layers import Dense, Activation, Flatten, GlobalAveragePooling2D
 from keras.layers import Convolution2D, MaxPooling2D, ZeroPadding2D, AveragePooling2D
+from keras.utils.layer_utils import print_summary
 from keras.layers import BatchNormalization
 from keras.regularizers import l2
 from keras.models import Model
 from keras.preprocessing import image
-import keras.backend as K
-from keras.callbacks import LearningRateScheduler
-from keras.utils.layer_utils import print_summary
 
 from sklearn.utils import shuffle
+from sklearn.preprocessing import LabelBinarizer
 from sklearn.cross_validation import train_test_split
 
-from utils import threaded_batch_iter_loc, bbox_tta
+from utils import threaded_batch_iter_class_synth, bbox_tta
+
+from skimage.io import imshow
 
 # set up training params
-ITERS = 150
+ITERS = 200
 BATCHSIZE = 64
 LR_SCHEDULE = {
-     0: 0.0001,
-    100: 0.00001,
+     0: 0.00001,
+    10: 0.0001,
+   150: 0.00001,
 }
 
 # get number for ensemble
 ensmb = int(sys.argv[1])
 
-# number of TTA
-num_crops = int(sys.argv[2])
+# LabelBinarizer
+lblr = LabelBinarizer()
 
 '''
 ------------------------------------------------------------------------------------------------
@@ -196,18 +201,19 @@ def ResNet50():
     #x = Dense(1024, activation='relu', name='fc8')(x)
     #x = Dropout(p=0.5)(x)
 
-    out = Dense(4, activation='sigmoid', name='coords')(x)
+    class_out = Dense(8, activation='softmax', name='class')(x)
 
-    model = Model(img_input, out)
+    model = Model(img_input, class_out)
 
     # load weights
     #f = h5py.File('data/resnet50_weights_th_dim_ordering_th_kernels_notop.h5')
-    model.load_weights('weights/best_resnet_fullimg_class_' + str(ensmb) + '.h5', by_name=True)
+    model.load_weights('data/resnet50_weights_tf_dim_ordering_tf_kernels_notop.h5', by_name=True)
 
     if K.backend() == 'theano':
         convert_all_kernels_in_model(model)
 
     return model
+
 
 '''
 ------------------------------------------------------------------------------------------------
@@ -225,6 +231,20 @@ filez = pickle.load(f)
 f.close()
 
 print 'Data shapes:', X_dat.shape, y_coords.shape, y_labels.shape
+
+
+'''
+------------------------------------------------------------------------------------------------
+Compile and Train the Model
+------------------------------------------------------------------------------------------------
+'''
+resnet = ResNet50()
+
+adam = Adam(lr=0.0001)
+sgd = SGD(lr=0.001, momentum=0.9, nesterov=True)
+resnet.compile(loss='categorical_crossentropy', optimizer=adam, metrics=['accuracy'])
+
+lblr.fit(y_labels)
 print y_labels
 
 idx = np.random.permutation(len(X_dat))
@@ -240,7 +260,7 @@ X_test = X_dat[:split]
 y_bb_train = y_coords[split:]
 y_bb_test = y_coords[:split]
 y_lbl_train = y_labels[split:]
-y_lbl_test = y_labels[:split]
+y_lbl_test = lblr.transform(y_labels[:split])
 
 print 'Train/val data shapes:', X_train.shape, X_test.shape
 print 'Train/val bb shapes:', y_bb_train.shape, y_bb_test.shape
@@ -255,39 +275,19 @@ X_test[:, :, :, 0] -= 103.939
 X_test[:, :, :, 1] -= 116.779
 X_test[:, :, :, 2] -= 123.68
 
-
-'''
-------------------------------------------------------------------------------------------------
-Compile and Train the Model
-
-To try:
-1) Felix Lau did 1000 iterations with early stopping and patience of 150 for the whale competition.
-   He wasn't able to use pretrained models in that competition though.
-   This one is initialized with ImageNet weights.
-2) Mess with dropout rate at the end of the ResNet
-3) Try dropout within the ResNet like how wide-resnets do it
-4) Try a different localization architecture, ResNet might be too big for such a small dataset
-------------------------------------------------------------------------------------------------
-'''
-
-resnet = ResNet50()
-
-#print_summary(resnet.layers)
-
-adam = Adam(lr=0.0001)
-sgd = SGD(lr=0.001, momentum=0.9, nesterov=True)
-resnet.compile(loss='mae', optimizer=adam)
-
-#resnet.fit(X_train, y_train, batch_size=64, nb_epoch=100, shuffle=True,
-#           verbose=2, validation_data=(X_test, y_test), callbacks=callback_list)
-
 # load batch_iter
-batch_iter = threaded_batch_iter_loc(batchsize=BATCHSIZE)
+batch_iter = threaded_batch_iter_class_synth(batchsize=BATCHSIZE, lblr=lblr)
 
 print "Starting training ..."
-# batch iterator with 300 epochs
+# batch iterator with 300 epoch
+
+#vgg_model.fit(X_train, [y_bb_train, y_lbl_train], batch_size=BATCHSIZE, nb_epoch=ITERS,
+#              validation_data=(X_test, [y_bb_test, y_lbl_test]), verbose=2)
+
 train_loss = []
+train_acc = []
 valid_loss = []
+valid_acc = []
 best_vl = 20.0
 patience = 0
 try:
@@ -298,19 +298,28 @@ try:
         start = time.time()
         #loss = batch_iterator(x_train, y_train, 64, model)
         batch_loss = []
+        batch_acc = []
+        batch_class_loss = []
         for X_batch, y_batch in batch_iter(X_train, y_lbl_train, y_bb_train):
-            loss = resnet.train_on_batch(X_batch, y_batch)
+            loss, acc_t = resnet.train_on_batch(X_batch, y_batch)
             batch_loss.append(loss)
+            batch_acc.append(acc_t)
 
         train_loss.append(np.mean(batch_loss))
-        v_loss = resnet.evaluate(X_test, y_bb_test, batch_size=BATCHSIZE, verbose = 0)
+        train_acc.append(np.mean(batch_acc))
+        v_loss, v_acc = resnet.evaluate(X_test, y_lbl_test, batch_size=BATCHSIZE, verbose = 0)
         valid_loss.append(v_loss)
+
         end = time.time() - start
-        print epoch, '| Tloss:', np.round(np.mean(batch_loss), decimals = 3), '| Vloss:', np.round(v_loss, decimals = 3), '| time:', np.round(end, decimals = 1)
+        print epoch, '| tL:{:.3} | tA:{:.3} | vL:{:.3} | vA:{:.3} | T:{}'.format(train_loss[epoch],
+                                                                                 train_acc[epoch],
+                                                                                 v_loss,
+                                                                                 v_acc,
+                                                                                 int(end))
 
         if v_loss < best_vl:
             best_vl = v_loss
-            resnet.save_weights('weights/best_resnet_loc_' + str(ensmb) + '.h5')
+            resnet.save_weights('weights/best_resnet_fullimg_class_' + str(ensmb) + '.h5')
             best_epoch = epoch
 
         if v_loss > best_vl:
@@ -318,89 +327,10 @@ try:
         else:
             patience = 0
 
-        if patience >= 150:
+        if patience >= 50:
             break
 
 except KeyboardInterrupt:
     pass
 
 print 'best epoch:', best_epoch
-
-
-'''
-------------------------------------------------------------------------------------------------
-Test an image and see how it did
-------------------------------------------------------------------------------------------------
-'''
-
-resnet.load_weights('weights/best_resnet_loc_' + str(ensmb) + '.h5')
-guess_coords = bbox_tta(resnet, X_test, num_tta=num_crops)
-
-
-# some things to try
-# 1) inflate the bounding box by some amount, say 10%, to allow for some error
-# 2) force bounding box to be square, by taking the max of width and height and setting both to that
-# 3)
-
-choice_imgs = random.sample(xrange(len(X_test)), 10)
-
-i = 0
-for choice in choice_imgs:
-
-    # display the test image and it's bounding box
-    test_img = X_test[choice]
-    #test_img = imread(test_file)
-
-    test_coords = y_bb_test[choice]
-
-    # put bounding box back into original size
-    test_coords[0] *= test_img.shape[1]
-    test_coords[1] *= test_img.shape[0]
-    test_coords[2] *= test_img.shape[1]
-    test_coords[3] *= test_img.shape[0]
-
-    # get the guess coordinates
-    guess = guess_coords[choice]
-
-    # put bounding box back into original size
-    guess[0] *= test_img.shape[1]
-    guess[1] *= test_img.shape[0]
-    guess[2] *= test_img.shape[1]
-    guess[3] *= test_img.shape[0]
-
-    # inflate bounding box by 10%
-    guess[0] -= 0.5 * (0.1 * guess[2])
-    guess[1] -= 0.5 * (0.1 * guess[3])
-    guess[2] += 0.5 * (0.1 * guess[2])
-    guess[3] += 0.5 * (0.1 * guess[3])
-
-    fig, ax = plt.subplots(1)
-
-    # display the image
-    # add back in the imagenet means
-    test_img[:, :, 0] += 103.939
-    test_img[:, :, 1] += 116.779
-    test_img[:, :, 2] += 123.68
-    # back to RGB
-    test_img = test_img[:, :, [2,1,0]]
-
-    ax.imshow(test_img / 255.)
-
-    # draw the true bounding box in yellow
-    rect_tru = patches.Rectangle((test_coords[0], test_coords[1]), test_coords[2], test_coords[3],
-                                  linewidth=2, edgecolor='y',facecolor='none')
-
-    # draw the guess bounding box in red
-    rect_guess = patches.Rectangle((guess[0], guess[1]), guess[2], guess[3],
-                                    linewidth=2, edgecolor='r',facecolor='none')
-
-    # add the rectangles
-    ax.add_patch(rect_tru)
-    ax.add_patch(rect_guess)
-
-    # display
-    #plt.show()
-    plt.savefig('loc_test_imgs/fish_box_resnet_synth' + str(i) + '.png')
-    plt.clf()
-
-    i += 1
